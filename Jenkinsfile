@@ -4,8 +4,14 @@ pipeline {
     stages {
         stage('Checkout Source') {
             steps {
-                echo 'Checking out source code from GitHub'
                 checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                echo 'Installing Node dependencies'
+                sh 'npm ci'
             }
         }
     }
