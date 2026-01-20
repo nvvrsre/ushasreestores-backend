@@ -8,10 +8,12 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Install Dependencies (Auth Service)') {
             steps {
-                echo 'Installing Node dependencies'
-                sh 'npm ci'
+                echo 'Installing Node dependencies for auth-service'
+                dir('auth-service') {
+                    sh 'npm ci'
+                }
             }
         }
     }
