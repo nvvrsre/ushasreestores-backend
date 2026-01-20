@@ -1,0 +1,6 @@
+projectKey=auth-service
+serverUrl=https://sonarqube.ushasree.com
+serverVersion=25.5.0.107428
+dashboardUrl=https://sonarqube.ushasree.com/dashboard?id=auth-service
+ceTaskId=a565bdbc-ccfb-4dd6-abe7-891985641cc8
+ceTaskUrl=https://sonarqube.ushasree.com/api/ce/task?id=a565bdbc-ccfb-4dd6-abe7-891985641cc8

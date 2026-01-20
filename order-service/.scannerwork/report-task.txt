@@ -1,0 +1,6 @@
+projectKey=order-service
+serverUrl=https://sonarqube.ushasree.com
+serverVersion=25.5.0.107428
+dashboardUrl=https://sonarqube.ushasree.com/dashboard?id=order-service
+ceTaskId=d0a0f979-0043-4e94-a107-bf112f72c1f1
+ceTaskUrl=https://sonarqube.ushasree.com/api/ce/task?id=d0a0f979-0043-4e94-a107-bf112f72c1f1

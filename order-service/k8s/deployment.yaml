@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+      annotations:
+        argocd-sync-force: "16097336139"
+    spec:
+      containers:
+        - name: order-service
+          image: nvvrsre/order-service:v1
+          ports:
+            - containerPort: 3004
+          env:
+            - name: DB_HOST
+              value: "mysql"
+            - name: DB_USER
+              value: "ushasree-db"
+            - name: DB_PASSWORD
+              value: "ushasree123"
+            - name: DB_NAME
+              value: "ushasree_order"
+            - name: PORT
+              value: "3004"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

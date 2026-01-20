@@ -1,0 +1,6 @@
+projectKey=payment-service
+serverUrl=https://sonarqube.ushasree.com
+serverVersion=25.5.0.107428
+dashboardUrl=https://sonarqube.ushasree.com/dashboard?id=payment-service
+ceTaskId=dae9993a-1177-4269-9c3c-7e5d59103cd7
+ceTaskUrl=https://sonarqube.ushasree.com/api/ce/task?id=dae9993a-1177-4269-9c3c-7e5d59103cd7

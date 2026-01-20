@@ -1,0 +1,6 @@
+projectKey=product-service
+serverUrl=https://sonarqube.ushasree.com
+serverVersion=25.5.0.107428
+dashboardUrl=https://sonarqube.ushasree.com/dashboard?id=product-service
+ceTaskId=22e25abf-b2d8-4094-900f-f65ec326a5a8
+ceTaskUrl=https://sonarqube.ushasree.com/api/ce/task?id=22e25abf-b2d8-4094-900f-f65ec326a5a8

@@ -1,0 +1,10 @@
+node_modules
+coverage
+.env
+.git
+.gitignore
+Dockerfile
+k8s
+helm
+tests
+npm-debug.log
