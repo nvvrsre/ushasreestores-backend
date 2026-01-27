@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        CI = 'true'   // activates CI-aware ESLint rules
+        CI = 'true'
     }
 
     stages {
@@ -26,6 +26,14 @@ pipeline {
                 echo 'Running ESLint for all backend services'
                 sh 'chmod +x eslint.sh'
                 sh './eslint.sh'
+            }
+        }
+
+        stage('Test (Backend Services)') {
+            steps {
+                echo 'Running backend tests'
+                sh 'chmod +x test-backend-services.sh'
+                sh './test-backend-services.sh'
             }
         }
     }
