@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         CI = 'true'
-        API_GATEWAY_DIR = 'Backend/api-gateway'
+        API_GATEWAY_DIR = 'Backend/api-gateway'   // adjust ONLY if needed
     }
 
     stages {
@@ -14,10 +14,18 @@ pipeline {
             }
         }
 
+        stage('Debug Workspace Structure') {
+            steps {
+                echo 'Workspace root contents:'
+                sh 'pwd && ls -la'
+            }
+        }
+
         stage('Install Backend Dependencies') {
             steps {
                 echo 'Installing dependencies for all backend services'
                 sh '''
+                  ls -la
                   chmod +x install-backend-deps.sh
                   ./install-backend-deps.sh
                 '''
@@ -40,14 +48,17 @@ pipeline {
                 sh '''
                   set +e
 
+                  echo "Checking API Gateway directory..."
+                  ls -la Backend || true
+                  ls -la $API_GATEWAY_DIR || exit 1
+
+                  echo "Starting API Gateway..."
                   cd $API_GATEWAY_DIR
 
-                  # Start API Gateway in background
                   npm start &
                   API_GATEWAY_PID=$!
-                  echo "API Gateway started with PID: $API_GATEWAY_PID"
+                  echo "API Gateway PID: $API_GATEWAY_PID"
 
-                  # Wait for server to be ready (simple + reliable)
                   echo "Waiting for API Gateway to be ready..."
                   for i in {1..10}; do
                     if curl -s http://localhost:3000 >/dev/null; then
@@ -57,15 +68,15 @@ pipeline {
                     sleep 1
                   done
 
-                  cd ../..
+                  cd -
 
-                  echo 'Running backend tests'
+                  echo "Running backend tests..."
                   chmod +x test-backend-services.sh
                   ./test-backend-services.sh
                   TEST_STATUS=$?
 
-                  echo 'Stopping API Gateway'
-                  kill $API_GATEWAY_PID
+                  echo "Stopping API Gateway"
+                  kill $API_GATEWAY_PID || true
 
                   exit $TEST_STATUS
                 '''
