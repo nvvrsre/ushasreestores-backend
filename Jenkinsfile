@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         CI = 'true'
-        API_GATEWAY_DIR = 'Backend/api-gateway'   // adjust ONLY if needed
+        API_GATEWAY_DIR = 'api-gateway'
     }
 
     stages {
@@ -25,7 +25,6 @@ pipeline {
             steps {
                 echo 'Installing dependencies for all backend services'
                 sh '''
-                  ls -la
                   chmod +x install-backend-deps.sh
                   ./install-backend-deps.sh
                 '''
@@ -49,7 +48,7 @@ pipeline {
                   set +e
 
                   echo "Checking API Gateway directory..."
-                  ls -la Backend || true
+                  ls -la
                   ls -la $API_GATEWAY_DIR || exit 1
 
                   echo "Starting API Gateway..."
@@ -60,7 +59,7 @@ pipeline {
                   echo "API Gateway PID: $API_GATEWAY_PID"
 
                   echo "Waiting for API Gateway to be ready..."
-                  for i in {1..10}; do
+                  for i in {1..15}; do
                     if curl -s http://localhost:3000 >/dev/null; then
                       echo "API Gateway is up"
                       break
