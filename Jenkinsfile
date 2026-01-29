@@ -43,44 +43,43 @@ pipeline {
         stage('SonarQube Scan (All Backend Services)') {
             steps {
                 echo 'Running SonarQube analysis for all backend services'
+
                 withSonarQubeEnv('sonarqube') {
-                    sh '''
-                      set -e
+                    script {
+                        def scannerHome = tool 'SonarQube Scanner'
 
-                      SERVICES="
-                        api-gateway
-                        auth-service
-                        cart-service
-                        catalog-service
-                        order-service
-                        payment-service
-                        product-service
-                        promo-service
-                        notification-service
-                      "
+                        sh """
+                          set -e
+                          export PATH=\$PATH:${scannerHome}/bin
 
-                      for svc in $SERVICES; do
-                        echo "======================================"
-                        echo "🔍 SonarQube scan for: $svc"
-                        echo "======================================"
+                          SERVICES="
+                            api-gateway
+                            auth-service
+                            cart-service
+                            catalog-service
+                            order-service
+                            payment-service
+                            product-service
+                            promo-service
+                            notification-service
+                          "
 
-                        if [ ! -d "$svc" ]; then
-                          echo "❌ Directory $svc not found"
-                          exit 1
-                        fi
+                          for svc in \$SERVICES; do
+                            echo "======================================"
+                            echo "🔍 SonarQube scan for: \$svc"
+                            echo "======================================"
 
-                        cd $svc
+                            if [ ! -d "\$svc" ]; then
+                              echo "❌ Service directory not found: \$svc"
+                              exit 1
+                            fi
 
-                        if [ ! -f sonar-project.properties ]; then
-                          echo "❌ sonar-project.properties missing in $svc"
-                          exit 1
-                        fi
-
-                        sonar-scanner
-
-                        cd -
-                      done
-                    '''
+                            cd \$svc
+                            sonar-scanner
+                            cd -
+                          done
+                        """
+                    }
                 }
             }
         }
