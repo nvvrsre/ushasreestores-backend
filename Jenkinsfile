@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         CI = 'true'
-        API_GATEWAY_DIR = 'api-gateway'
     }
 
     stages {
@@ -41,44 +40,48 @@ pipeline {
             }
         }
 
-        stage('Test (Backend Services)') {
+        stage('SonarQube Scan (All Backend Services)') {
             steps {
-                echo 'Starting API Gateway for integration smoke tests'
-                sh '''
-                  set +e
+                echo 'Running SonarQube analysis for all backend services'
+                withSonarQubeEnv('sonarqube') {
+                    sh '''
+                      set -e
 
-                  echo "Checking API Gateway directory..."
-                  ls -la
-                  ls -la $API_GATEWAY_DIR || exit 1
+                      SERVICES="
+                        api-gateway
+                        auth-service
+                        cart-service
+                        catalog-service
+                        order-service
+                        payment-service
+                        product-service
+                        promo-service
+                        notification-service
+                      "
 
-                  echo "Starting API Gateway..."
-                  cd $API_GATEWAY_DIR
+                      for svc in $SERVICES; do
+                        echo "======================================"
+                        echo "🔍 SonarQube scan for: $svc"
+                        echo "======================================"
 
-                  npm start &
-                  API_GATEWAY_PID=$!
-                  echo "API Gateway PID: $API_GATEWAY_PID"
+                        if [ ! -d "$svc" ]; then
+                          echo "❌ Directory $svc not found"
+                          exit 1
+                        fi
 
-                  echo "Waiting for API Gateway to be ready..."
-                  for i in {1..15}; do
-                    if curl -s http://localhost:3000 >/dev/null; then
-                      echo "API Gateway is up"
-                      break
-                    fi
-                    sleep 1
-                  done
+                        cd $svc
 
-                  cd -
+                        if [ ! -f sonar-project.properties ]; then
+                          echo "❌ sonar-project.properties missing in $svc"
+                          exit 1
+                        fi
 
-                  echo "Running backend tests..."
-                  chmod +x test-backend-services.sh
-                  ./test-backend-services.sh
-                  TEST_STATUS=$?
+                        sonar-scanner
 
-                  echo "Stopping API Gateway"
-                  kill $API_GATEWAY_PID || true
-
-                  exit $TEST_STATUS
-                '''
+                        cd -
+                      done
+                    '''
+                }
             }
         }
     }
@@ -87,11 +90,11 @@ pipeline {
         always {
             echo 'Backend CI pipeline completed'
         }
-        failure {
-            echo 'Backend CI pipeline FAILED'
-        }
         success {
             echo 'Backend CI pipeline SUCCEEDED'
+        }
+        failure {
+            echo 'Backend CI pipeline FAILED'
         }
     }
 }
