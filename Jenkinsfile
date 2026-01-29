@@ -3,6 +3,21 @@ pipeline {
 
     environment {
         CI = 'true'
+
+        DOCKERHUB_NAMESPACE = 'nvvrsre'
+        IMAGE_TAG = 'v29.01.26'
+
+        SERVICES = '''
+          api-gateway
+          auth-service
+          cart-service
+          catalog-service
+          order-service
+          payment-service
+          product-service
+          promo-service
+          notification-service
+        '''
     }
 
     stages {
@@ -15,14 +30,12 @@ pipeline {
 
         stage('Debug Workspace Structure') {
             steps {
-                echo 'Workspace root contents:'
                 sh 'pwd && ls -la'
             }
         }
 
         stage('Install Backend Dependencies') {
             steps {
-                echo 'Installing dependencies for all backend services'
                 sh '''
                   chmod +x install-backend-deps.sh
                   ./install-backend-deps.sh
@@ -32,7 +45,6 @@ pipeline {
 
         stage('Lint (Backend Services)') {
             steps {
-                echo 'Running ESLint for all backend services'
                 sh '''
                   chmod +x eslint.sh
                   ./eslint.sh
@@ -42,8 +54,6 @@ pipeline {
 
         stage('SonarQube Scan (All Backend Services)') {
             steps {
-                echo 'Running SonarQube analysis for all backend services'
-
                 withSonarQubeEnv('sonarqube') {
                     script {
                         def scannerHome = tool 'SonarQube Scanner'
@@ -52,34 +62,78 @@ pipeline {
                           set -e
                           export PATH=\$PATH:${scannerHome}/bin
 
-                          SERVICES="
-                            api-gateway
-                            auth-service
-                            cart-service
-                            catalog-service
-                            order-service
-                            payment-service
-                            product-service
-                            promo-service
-                            notification-service
-                          "
-
                           for svc in \$SERVICES; do
-                            echo "======================================"
                             echo "🔍 SonarQube scan for: \$svc"
-                            echo "======================================"
-
-                            if [ ! -d "\$svc" ]; then
-                              echo "❌ Service directory not found: \$svc"
-                              exit 1
-                            fi
-
                             cd \$svc
                             sonar-scanner
                             cd -
                           done
                         """
                     }
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate (ENFORCED)') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Build Docker Images') {
+            steps {
+                sh """
+                  set -e
+
+                  for svc in \$SERVICES; do
+                    echo "🐳 Building image: \$svc"
+
+                    docker build \
+                      -t \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG \
+                      -t \$DOCKERHUB_NAMESPACE/\$svc:latest \
+                      \$svc
+                  done
+                """
+            }
+        }
+
+        stage('Scan Docker Images (Trivy)') {
+            steps {
+                sh """
+                  set -e
+
+                  for svc in \$SERVICES; do
+                    echo "🔐 Scanning image: \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG"
+
+                    trivy image \
+                      --exit-code 1 \
+                      --severity CRITICAL,HIGH \
+                      \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG
+                  done
+                """
+            }
+        }
+
+        stage('Push Docker Images to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                      set -e
+                      echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
+
+                      for svc in \$SERVICES; do
+                        echo "📦 Pushing image: \$svc"
+
+                        docker push \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG
+                        docker push \$DOCKERHUB_NAMESPACE/\$svc:latest
+                      done
+                    """
                 }
             }
         }
