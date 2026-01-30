@@ -4,14 +4,14 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
-        skipStagesAfterUnstable(false)
     }
 
     environment {
         CI = 'true'
 
         DOCKERHUB_NAMESPACE = 'nvvrsre'
-        IMAGE_TAG = "v30.01.26"
+        IMAGE_TAG = 'v30.01.26'
+
 
         SERVICES = '''
           api-gateway
@@ -102,7 +102,6 @@ pipeline {
                         echo "🔍 SonarQube scan for ${svc}"
 
                         ws("${env.WORKSPACE}@sonar-${svc}") {
-
                             checkout scm
 
                             withSonarQubeEnv('sonarqube') {
@@ -177,10 +176,6 @@ pipeline {
             }
         }
     }
-
-    /* =========================
-       POST
-    ========================== */
 
     post {
         success {
