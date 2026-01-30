@@ -59,13 +59,12 @@ pipeline {
                 withSonarQubeEnv('sonarqube') {
                     script {
                         def scannerHome = tool 'SonarQube Scanner'
-                        sh "export PATH=\$PATH:${scannerHome}/bin"
 
                         SERVICES.split().each { svc ->
                             echo "🔍 SonarQube scan for ${svc}"
 
                             dir(svc) {
-                                sh 'sonar-scanner'
+                                sh "${scannerHome}/bin/sonar-scanner"
                             }
 
                             timeout(time: 5, unit: 'MINUTES') {
