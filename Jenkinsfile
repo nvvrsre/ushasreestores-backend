@@ -51,7 +51,7 @@ pipeline {
                   for svc in $SERVICES; do
                     echo "Running tests for $svc"
                     cd $svc
-                    npm test >/dev/null 2>&1 || true
+                    npm test -- --runInBand --forceExit --detectOpenHandles >/dev/null 2>&1 || true
                     cd -
                   done
                 '''
