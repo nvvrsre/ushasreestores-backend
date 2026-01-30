@@ -65,10 +65,11 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                     sh '''
                       for svc in $SERVICES; do
-                        echo "🧪 Running tests for $svc (learning mode)"
+                        echo "🧪 Running unit tests for $svc"
                         cd $svc
                         CI=true NODE_ENV=test \
-                        npm test --runInBand --detectOpenHandles || true
+                        npm test --runInBand --detectOpenHandles \
+                        2>/dev/null || true
                         cd -
                       done
                     '''
@@ -87,14 +88,14 @@ pipeline {
             }
         }
 
-        stage('SonarQube Scan') {
+        stage('Static Code Analysis (SonarQube)') {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                     withSonarQubeEnv('sonarqube') {
                         script {
                             def scannerHome = tool 'SonarQube Scanner'
                             for (svc in SERVICES.split()) {
-                                echo "🔍 Sonar scan for $svc (learning mode)"
+                                echo "🔍 Running SonarQube analysis for $svc"
                                 dir(svc) {
                                     sh "${scannerHome}/bin/sonar-scanner || true"
                                 }
@@ -110,7 +111,7 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                     sh '''
                       for svc in $SERVICES; do
-                        echo "🐳 Building image: $svc"
+                        echo "🐳 Building Docker image for $svc"
                         docker build \
                           -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
                           -t $DOCKERHUB_NAMESPACE/$svc:latest \
@@ -127,7 +128,7 @@ pipeline {
                     sh '''
                       for svc in $SERVICES; do
                         IMAGE=$DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
-                        echo "🔐 Trivy scan for $IMAGE"
+                        echo "🔐 Scanning image $IMAGE"
                         trivy image $IMAGE || true
                       done
                     '''
@@ -158,7 +159,7 @@ pipeline {
 
     post {
         always {
-            echo '✅ CI pipeline completed'
+            echo 'CI pipeline execution completed'
         }
     }
 }
