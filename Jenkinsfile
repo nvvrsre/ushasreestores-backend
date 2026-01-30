@@ -36,25 +36,37 @@ pipeline {
             }
         }
 
-        stage('Install Backend Dependencies') {
-            steps {
-                sh '''
-                  chmod +x install-backend-deps.sh
-                  ./install-backend-deps.sh >/dev/null 2>&1 || true
-                '''
+        stage('Install Backend Dependencies (Parallel)') {
+            parallel {
+                stage('Install Deps') {
+                    steps {
+                        sh '''
+                          for svc in $SERVICES; do
+                            echo "Installing deps for $svc"
+                            cd $svc
+                            npm ci --cache ~/.npm --prefer-offline >/dev/null 2>&1 || true
+                            cd -
+                          done
+                        '''
+                    }
+                }
             }
         }
 
-        stage('Unit Tests') {
-            steps {
-                sh '''
-                  for svc in $SERVICES; do
-                    echo "Running tests for $svc"
-                    cd $svc
-                    npm test -- --runInBand --forceExit --detectOpenHandles >/dev/null 2>&1 || true
-                    cd -
-                  done
-                '''
+        stage('Unit Tests (Parallel)') {
+            parallel {
+                stage('Run Tests') {
+                    steps {
+                        sh '''
+                          for svc in $SERVICES; do
+                            echo "Running tests for $svc"
+                            cd $svc
+                            npm test -- --runInBand --forceExit --detectOpenHandles >/dev/null 2>&1 || true
+                            cd -
+                          done
+                        '''
+                    }
+                }
             }
         }
 
@@ -83,17 +95,21 @@ pipeline {
             }
         }
 
-        stage('Build Docker Images') {
-            steps {
-                sh '''
-                  for svc in $SERVICES; do
-                    echo "Building Docker image for $svc"
-                    docker build \
-                      -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
-                      -t $DOCKERHUB_NAMESPACE/$svc:latest \
-                      $svc >/dev/null 2>&1 || true
-                  done
-                '''
+        stage('Build Docker Images (Parallel)') {
+            parallel {
+                stage('Docker Build') {
+                    steps {
+                        sh '''
+                          for svc in $SERVICES; do
+                            echo "Building image for $svc"
+                            docker build \
+                              -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
+                              -t $DOCKERHUB_NAMESPACE/$svc:latest \
+                              $svc >/dev/null 2>&1 || true
+                          done
+                        '''
+                    }
+                }
             }
         }
 
@@ -120,6 +136,7 @@ pipeline {
                       echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin >/dev/null 2>&1 || true
                       for svc in $SERVICES; do
                         docker push $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG >/dev/null 2>&1 || true
+                        docker push $DOCKERHUB_NAMESPACE/$svc:latest >/dev/null 2>&1 || true
                       done
                     '''
                 }
