@@ -54,21 +54,27 @@ pipeline {
             }
         }
 
-        stage('SonarQube Scan + Quality Gate (Per Service)') {
+        stage('SonarQube Scan + Quality Gate (Per Service, Isolated)') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    script {
-                        def scannerHome = tool 'SonarQube Scanner'
+                script {
+                    def scannerHome = tool 'SonarQube Scanner'
 
-                        SERVICES.split().each { svc ->
-                            echo "🔍 SonarQube scan for ${svc}"
+                    SERVICES.split().each { svc ->
+                        echo "🔍 SonarQube scan for ${svc}"
 
-                            dir(svc) {
-                                sh "${scannerHome}/bin/sonar-scanner"
-                            }
+                        // 🔒 HARD ISOLATION — one workspace per service
+                        ws("${env.WORKSPACE}@sonar-${svc}") {
 
-                            timeout(time: 5, unit: 'MINUTES') {
-                                waitForQualityGate abortPipeline: true
+                            checkout scm
+
+                            withSonarQubeEnv('sonarqube') {
+                                dir(svc) {
+                                    sh "${scannerHome}/bin/sonar-scanner"
+                                }
+
+                                timeout(time: 5, unit: 'MINUTES') {
+                                    waitForQualityGate abortPipeline: true
+                                }
                             }
                         }
                     }
