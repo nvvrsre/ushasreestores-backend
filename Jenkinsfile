@@ -1,11 +1,17 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
+    }
+
     environment {
         CI = 'true'
 
         DOCKERHUB_NAMESPACE = 'nvvrsre'
-        IMAGE_TAG = 'v30.01.26'
+        IMAGE_TAG = "v${new Date().format('dd.MM.yy')}"
 
         SERVICES = '''
           api-gateway
@@ -22,17 +28,38 @@ pipeline {
 
     stages {
 
+        /* =========================
+           PREP & SANITY
+        ========================== */
+
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
         stage('Checkout Source') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Debug Workspace Structure') {
+        stage('Verify Build Tools') {
             steps {
-                sh 'pwd && ls -la'
+                sh '''
+                  set -e
+                  java -version
+                  node -v
+                  npm -v
+                  docker --version
+                  trivy --version
+                '''
             }
         }
+
+        /* =========================
+           DEPENDENCIES & QUALITY
+        ========================== */
 
         stage('Install Backend Dependencies') {
             steps {
@@ -40,6 +67,20 @@ pipeline {
                   set -e
                   chmod +x install-backend-deps.sh
                   ./install-backend-deps.sh
+                '''
+            }
+        }
+
+        stage('Unit Tests (Backend)') {
+            steps {
+                sh '''
+                  set -e
+                  for svc in $SERVICES; do
+                    echo "🧪 Running tests for $svc"
+                    cd $svc
+                    npm test
+                    cd -
+                  done
                 '''
             }
         }
@@ -54,7 +95,11 @@ pipeline {
             }
         }
 
-        stage('SonarQube Scan + Quality Gate (Per Service, Isolated)') {
+        /* =========================
+           SONARQUBE — HARD ISOLATION
+        ========================== */
+
+        stage('SonarQube Scan + Quality Gate (Per Service)') {
             steps {
                 script {
                     def scannerHome = tool 'SonarQube Scanner'
@@ -62,7 +107,6 @@ pipeline {
                     SERVICES.split().each { svc ->
                         echo "🔍 SonarQube scan for ${svc}"
 
-                        // 🔒 HARD ISOLATION — one workspace per service
                         ws("${env.WORKSPACE}@sonar-${svc}") {
 
                             checkout scm
@@ -82,6 +126,10 @@ pipeline {
             }
         }
 
+        /* =========================
+           CONTAINER PIPELINE
+        ========================== */
+
         stage('Build Docker Images') {
             steps {
                 sh '''
@@ -98,7 +146,7 @@ pipeline {
             }
         }
 
-        stage('Scan Docker Images (Trivy)') {
+        stage('Container Security Scan (Trivy)') {
             steps {
                 sh '''
                   set -e
@@ -134,15 +182,20 @@ pipeline {
         }
     }
 
+    /* =========================
+       POST ACTIONS
+    ========================== */
+
     post {
-        always {
-            echo 'Backend CI pipeline completed'
-        }
         success {
-            echo 'Backend CI pipeline SUCCEEDED'
+            echo '✅ Backend CI pipeline SUCCEEDED'
         }
         failure {
-            echo 'Backend CI pipeline FAILED'
+            echo '❌ Backend CI pipeline FAILED'
+        }
+        always {
+            cleanWs()
+            echo '🧹 Workspace cleaned'
         }
     }
 }
