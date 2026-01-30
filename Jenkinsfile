@@ -5,7 +5,7 @@ pipeline {
         CI = 'true'
 
         DOCKERHUB_NAMESPACE = 'nvvrsre'
-        IMAGE_TAG = 'v29.01.26'
+        IMAGE_TAG = 'v30.01.26'
 
         SERVICES = '''
           api-gateway
