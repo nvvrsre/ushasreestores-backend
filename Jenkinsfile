@@ -37,6 +37,7 @@ pipeline {
         stage('Install Backend Dependencies') {
             steps {
                 sh '''
+                  set -e
                   chmod +x install-backend-deps.sh
                   ./install-backend-deps.sh
                 '''
@@ -46,71 +47,63 @@ pipeline {
         stage('Lint (Backend Services)') {
             steps {
                 sh '''
+                  set -e
                   chmod +x eslint.sh
                   ./eslint.sh
                 '''
             }
         }
 
-        stage('SonarQube Scan (All Backend Services)') {
+        stage('SonarQube Scan + Quality Gate (Per Service)') {
             steps {
                 withSonarQubeEnv('sonarqube') {
                     script {
                         def scannerHome = tool 'SonarQube Scanner'
+                        sh "export PATH=\$PATH:${scannerHome}/bin"
 
-                        sh """
-                          set -e
-                          export PATH=\$PATH:${scannerHome}/bin
+                        SERVICES.split().each { svc ->
+                            echo "🔍 SonarQube scan for ${svc}"
 
-                          for svc in \$SERVICES; do
-                            echo "🔍 SonarQube scan for: \$svc"
-                            cd \$svc
-                            sonar-scanner
-                            cd -
-                          done
-                        """
+                            dir(svc) {
+                                sh 'sonar-scanner'
+                            }
+
+                            timeout(time: 5, unit: 'MINUTES') {
+                                waitForQualityGate abortPipeline: true
+                            }
+                        }
                     }
-                }
-            }
-        }
-
-        stage('SonarQube Quality Gate (ENFORCED)') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
         stage('Build Docker Images') {
             steps {
-                sh """
+                sh '''
                   set -e
-
-                  for svc in \$SERVICES; do
-                    echo "🐳 Building image: \$svc"
+                  for svc in $SERVICES; do
+                    echo "🐳 Building image: $svc"
 
                     docker build \
-                      -t \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG \
-                      -t \$DOCKERHUB_NAMESPACE/\$svc:latest \
-                      \$svc
+                      -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
+                      -t $DOCKERHUB_NAMESPACE/$svc:latest \
+                      $svc
                   done
-                """
+                '''
             }
         }
 
         stage('Scan Docker Images (Trivy)') {
             steps {
-                sh """
+                sh '''
                   set -e
+                  for svc in $SERVICES; do
+                    IMAGE=$DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
+                    echo "🔐 Trivy scan for $IMAGE"
 
-                  for svc in \$SERVICES; do
-                    IMAGE=\$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG
-                    echo "🔐 Trivy scan for \$IMAGE"
-
-                    trivy image --severity CRITICAL \$IMAGE
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL $IMAGE
                   done
-                """
+                '''
             }
         }
 
@@ -121,17 +114,16 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
+                    sh '''
                       set -e
-                      echo "\$DOCKER_PASS" | docker login -u "\$DOCKER_USER" --password-stdin
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                      for svc in \$SERVICES; do
-                        echo "📦 Pushing image: \$svc"
-
-                        docker push \$DOCKERHUB_NAMESPACE/\$svc:\$IMAGE_TAG
-                        docker push \$DOCKERHUB_NAMESPACE/\$svc:latest
+                      for svc in $SERVICES; do
+                        echo "📦 Pushing image: $svc"
+                        docker push $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
+                        docker push $DOCKERHUB_NAMESPACE/$svc:latest
                       done
-                    """
+                    '''
                 }
             }
         }
