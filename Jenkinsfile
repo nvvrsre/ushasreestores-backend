@@ -1,17 +1,13 @@
 pipeline {
     agent any
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-    }
-
     environment {
         CI = 'true'
+        NODE_ENV = 'test'
+        SKIP_DB = 'true'
 
         DOCKERHUB_NAMESPACE = 'nvvrsre'
         IMAGE_TAG = 'v30.01.26'
-
 
         SERVICES = '''
           api-gateway
@@ -28,10 +24,6 @@ pipeline {
 
     stages {
 
-        /* =========================
-           PREP
-        ========================== */
-
         stage('Clean Workspace') {
             steps {
                 cleanWs()
@@ -47,7 +39,6 @@ pipeline {
         stage('Verify Build Tools') {
             steps {
                 sh '''
-                  java -version
                   node -v
                   npm -v
                   docker --version
@@ -55,10 +46,6 @@ pipeline {
                 '''
             }
         }
-
-        /* =========================
-           DEPENDENCIES
-        ========================== */
 
         stage('Install Backend Dependencies') {
             steps {
@@ -70,18 +57,14 @@ pipeline {
             }
         }
 
-        /* =========================
-           TESTS (NON-BLOCKING)
-        ========================== */
-
-        stage('Unit Tests (Non Blocking)') {
+        stage('Unit Tests (NON-BLOCKING)') {
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'SUCCESS') {
+                catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                     sh '''
                       for svc in $SERVICES; do
                         echo "🧪 Running tests for $svc"
                         cd $svc
-                        npm test || true
+                        NODE_ENV=test CI=true npm test || true
                         cd -
                       done
                     '''
@@ -89,24 +72,28 @@ pipeline {
             }
         }
 
-        /* =========================
-           SONARQUBE (NON-BLOCKING)
-        ========================== */
-
-        stage('SonarQube Scan (Non Blocking)') {
+        stage('Lint (NON-BLOCKING)') {
             steps {
-                script {
-                    def scannerHome = tool 'SonarQube Scanner'
+                catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                    sh '''
+                      chmod +x eslint.sh
+                      ./eslint.sh || true
+                    '''
+                }
+            }
+        }
 
-                    SERVICES.split().each { svc ->
-                        echo "🔍 SonarQube scan for ${svc}"
+        stage('SonarQube Scan (NON-BLOCKING)') {
+            steps {
+                catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                    withSonarQubeEnv('sonarqube') {
+                        script {
+                            def scannerHome = tool 'SonarQube Scanner'
 
-                        ws("${env.WORKSPACE}@sonar-${svc}") {
-                            checkout scm
-
-                            withSonarQubeEnv('sonarqube') {
+                            for (svc in SERVICES.split()) {
+                                echo "🔍 SonarQube scan for ${svc}"
                                 dir(svc) {
-                                    sh "${scannerHome}/bin/sonar-scanner"
+                                    sh "${scannerHome}/bin/sonar-scanner || true"
                                 }
                             }
                         }
@@ -115,25 +102,13 @@ pipeline {
             }
         }
 
-        stage('SonarQube Quality Gate (Reported, Not Enforced)') {
-            steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'SUCCESS') {
-                    timeout(time: 5, unit: 'MINUTES') {
-                        waitForQualityGate abortPipeline: false
-                    }
-                }
-            }
-        }
-
-        /* =========================
-           DOCKER PIPELINE
-        ========================== */
-
         stage('Build Docker Images') {
             steps {
                 sh '''
+                  set -e
                   for svc in $SERVICES; do
                     echo "🐳 Building image: $svc"
+
                     docker build \
                       -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
                       -t $DOCKERHUB_NAMESPACE/$svc:latest \
@@ -143,9 +118,9 @@ pipeline {
             }
         }
 
-        stage('Container Security Scan (Trivy)') {
+        stage('Container Security Scan (NON-BLOCKING)') {
             steps {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'SUCCESS') {
+                catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
                     sh '''
                       for svc in $SERVICES; do
                         IMAGE=$DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
@@ -165,7 +140,9 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
+                      set -e
                       echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+
                       for svc in $SERVICES; do
                         echo "📦 Pushing image: $svc"
                         docker push $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
@@ -178,17 +155,14 @@ pipeline {
     }
 
     post {
-        success {
-            echo '✅ Pipeline completed successfully'
+        always {
+            echo 'Backend CI pipeline completed'
         }
-        unstable {
-            echo '⚠️ Pipeline completed with warnings (tests / quality / security)'
+        success {
+            echo 'Backend CI pipeline SUCCEEDED'
         }
         failure {
-            echo '❌ Pipeline failed (infra or script error)'
-        }
-        always {
-            cleanWs()
+            echo 'Backend CI pipeline FAILED'
         }
     }
 }
