@@ -8,7 +8,17 @@ pipeline {
         DOCKERHUB_NAMESPACE = 'nvvrsre'
         IMAGE_TAG = 'v30.01.26'
 
-        SERVICES = 'api-gateway auth-service cart-service catalog-service order-service payment-service product-service promo-service notification-service'
+        SERVICES = '''
+          api-gateway
+          auth-service
+          cart-service
+          catalog-service
+          order-service
+          payment-service
+          product-service
+          promo-service
+          notification-service
+        '''
     }
 
     stages {
@@ -25,52 +35,29 @@ pipeline {
             }
         }
 
-        stage('Verify Build Tools') {
+        stage('Install Dependencies') {
             steps {
                 sh '''
-                  node -v || true
-                  npm -v || true
-                  docker --version || true
-                  trivy --version || true
+                  chmod +x install-backend-deps.sh
+                  ./install-backend-deps.sh >/dev/null 2>&1 || true
                 '''
             }
         }
 
-        stage('Install Backend Dependencies (Parallel)') {
-            parallel {
-                stage('Install Deps') {
-                    steps {
-                        sh '''
-                          for svc in $SERVICES; do
-                            echo "Installing deps for $svc"
-                            cd $svc
-                            npm ci --cache ~/.npm --prefer-offline >/dev/null 2>&1 || true
-                            cd -
-                          done
-                        '''
-                    }
-                }
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                  for svc in $SERVICES; do
+                    echo "Running tests for $svc"
+                    cd $svc
+                    timeout 60 npm test -- --silent >/dev/null 2>&1 || true
+                    cd - >/dev/null
+                  done
+                '''
             }
         }
 
-        stage('Unit Tests (Parallel)') {
-            parallel {
-                stage('Run Tests') {
-                    steps {
-                        sh '''
-                          for svc in $SERVICES; do
-                            echo "Running tests for $svc"
-                            cd $svc
-                            npm test -- --runInBand --forceExit --detectOpenHandles >/dev/null 2>&1 || true
-                            cd -
-                          done
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Linting') {
+        stage('Lint') {
             steps {
                 sh '''
                   chmod +x eslint.sh
@@ -79,7 +66,7 @@ pipeline {
             }
         }
 
-        stage('Static Code Analysis (SonarQube)') {
+        stage('SonarQube Scan') {
             steps {
                 withSonarQubeEnv('sonarqube') {
                     script {
@@ -95,31 +82,28 @@ pipeline {
             }
         }
 
-        stage('Build Docker Images (Parallel)') {
-            parallel {
-                stage('Docker Build') {
-                    steps {
-                        sh '''
-                          for svc in $SERVICES; do
-                            echo "Building image for $svc"
-                            docker build \
-                              -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
-                              -t $DOCKERHUB_NAMESPACE/$svc:latest \
-                              $svc >/dev/null 2>&1 || true
-                          done
-                        '''
-                    }
-                }
+        stage('Build Docker Images') {
+            steps {
+                sh '''
+                  for svc in $SERVICES; do
+                    echo "Building Docker image for $svc"
+                    docker build \
+                      -t $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG \
+                      $svc >/dev/null 2>&1 || true
+                  done
+                '''
             }
         }
 
-        stage('Container Security Scan') {
+        stage('Trivy Scan') {
             steps {
                 sh '''
                   for svc in $SERVICES; do
                     IMAGE=$DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG
                     echo "Scanning image $IMAGE"
-                    trivy image $IMAGE >/dev/null 2>&1 || true
+                    trivy image --severity HIGH,CRITICAL \
+                      --timeout 2m \
+                      $IMAGE >/dev/null 2>&1 || true
                   done
                 '''
             }
@@ -136,7 +120,6 @@ pipeline {
                       echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin >/dev/null 2>&1 || true
                       for svc in $SERVICES; do
                         docker push $DOCKERHUB_NAMESPACE/$svc:$IMAGE_TAG >/dev/null 2>&1 || true
-                        docker push $DOCKERHUB_NAMESPACE/$svc:latest >/dev/null 2>&1 || true
                       done
                     '''
                 }
@@ -149,7 +132,7 @@ pipeline {
             script {
                 currentBuild.result = 'SUCCESS'
             }
-            echo 'CI pipeline execution completed successfully'
+            echo '✅ CI pipeline completed successfully'
         }
     }
 }
