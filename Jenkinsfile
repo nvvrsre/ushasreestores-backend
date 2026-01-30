@@ -62,17 +62,17 @@ pipeline {
                 timeout(time: 2, unit: 'MINUTES')
             }
             steps {
-                    sh '''
-                      for svc in $SERVICES; do
-                        echo "🧪 Running unit tests for $svc"
-                        cd $svc
-                        # Run Test silently and alway exit with 0 to not fail the stage
-                        npm test >/dev/null 2>&1 || true
+                sh '''
+                  for svc in $SERVICES; do
+                    echo "🧪 Running unit tests for $svc"
+                    cd $svc
 
-                        cd -
-                      done
-                    '''
-                }
+                    # Run tests silently and always exit 0
+                    npm test >/dev/null 2>&1 || true
+
+                    cd -
+                  done
+                '''
             }
         }
 
